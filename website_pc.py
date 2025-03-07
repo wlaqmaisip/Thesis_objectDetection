@@ -1,10 +1,12 @@
 from flask import Flask, render_template, Response, request, jsonify, send_file
+from color import get_dominant_color
 from flask_socketio import SocketIO
-import cv2
+from picamera2 import Picamera2
 from ultralytics import YOLO
-from gtts import gTTS
-import os
 from io import BytesIO
+from gtts import gTTS
+import cv2
+import os
 
 app = Flask(__name__)
 
@@ -14,7 +16,7 @@ model = YOLO(model_path)
 
 # Object-color mapping (same as before)
 object_colors = {
-    "APPLE": ((0, 0, 255), "RED"),
+    "APPLE": ((0, 0, 255), " RED "),
     "BANANA": ((0, 255, 255), "YELLOW"),
     "BITTER MELON": ((0, 255, 0), "GREEN"),
     "BROCCOLI": ((0, 255, 0), "GREEN"),
@@ -28,26 +30,30 @@ object_colors = {
     "PEAR": ((0, 255, 255), "YELLOW"),
     "PUMPKIN": ((0, 165, 255), "ORANGE"),
     "RECTANGLE": ((0, 255, 255), "YELLOW"),
-    "SQUARE": ((0, 255, 255), "YELLOW"),
+    "SQUARE": ((0, 255, 255), "PURPLE"),
     "STAR": ((0, 165, 255), "ORANGE"),
-    "STRAWBERRY": ((0, 0, 255), "RED"),
-    "TOMATO": ((0, 0, 255), "RED"),
+    "STRAWBERRY": ((0, 0, 255), " RED "),
+    "TOMATO": ((0, 0, 255), " RED "),
     "TRIANGLE": ((255, 105, 180), "PINK"),
     "WATERMELON": ((0, 255, 0), "GREEN"),
 }
 
 # Object detection
-cap = cv2.VideoCapture(1)
+# cap = cv2.VideoCapture(1)
+tuning = Picamera2.load_tuning_file("imx477_noir.json")
+camera = Picamera2(tuning=tuning)
+camera.configure(camera.create_preview_configuration(main={"format": 'RGB888', "size": (1280, 1280)}))
+camera.set_controls({"Brightness": 0.25, "Saturation":1.5})  # Adjust the value as needed
+
+camera.start()
 
 detected_objects_global = []  # Store detected objects globally
 
 def generate_frames():
     global detected_objects_global
     while True:
-        success, frame = cap.read()
-        if not success:
-            continue
-
+        frame = camera.capture_array()
+        
         results = model.predict(frame, conf=0.6)
 
         detected_objects = []
@@ -56,7 +62,7 @@ def generate_frames():
                 class_id = int(box.cls[0])
                 detected_object = model.names[class_id].upper()
                 (bgr_color, color_name) = object_colors.get(detected_object, ((255, 255, 255), "WHITE"))
-
+                
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 cv2.rectangle(frame, (x1, y1), (x2, y2), bgr_color, 2)
                 label = f"{detected_object} ({color_name})"
